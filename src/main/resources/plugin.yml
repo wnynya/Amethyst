@@ -1,0 +1,4 @@
+name: Amethyst
+version: 0.8.1
+main: io.wany.amethyst
+api-version: 1.0
