@@ -5,9 +5,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -18,6 +18,9 @@ import io.wany.amethyst.Json;
 import io.wany.amethyst.network.HTTPRequestOptions.Method;
 import io.wany.amethyst.network.HTTPRequestOptions.ResponseType;
 
+/**
+ * Simple HTTP request client
+ */
 public class HTTPRequest extends EventEmitter {
 
   public static String USER_AGENT = System.getProperty("java.runtime.name");
@@ -30,10 +33,8 @@ public class HTTPRequest extends EventEmitter {
   private CompletableFuture<Object> future;
 
   private static List<Method> listOf(Method... args) {
-    List<Method> list = new ArrayList<Method>();
-    for (Method arg : args) {
-      list.add(arg);
-    }
+    List<Method> list = new ArrayList<>();
+    Collections.addAll(list, args);
     return list;
   }
 
@@ -50,7 +51,7 @@ public class HTTPRequest extends EventEmitter {
   }
 
   public CompletableFuture<Object> future() throws IOException {
-    future = new CompletableFuture<Object>();
+    future = new CompletableFuture<>();
     return future;
   }
 
@@ -64,8 +65,7 @@ public class HTTPRequest extends EventEmitter {
     });
     this.req.setConnectTimeout(this.opts.TIMEOUT);
 
-    if (listOf(Method.POST, Method.PUT, Method.PATCH, Method.DELETE).contains(this.opts.METHOD)
-        && this.body != null && !this.body.isBlank()) {
+    if (listOf(Method.POST, Method.PUT, Method.PATCH, Method.DELETE).contains(this.opts.METHOD) && this.body != null && !this.body.isBlank()) {
       this.req.setDoOutput(true);
       DataOutputStream outputStream = new DataOutputStream(this.req.getOutputStream());
       outputStream.writeBytes(this.body);
@@ -103,31 +103,36 @@ public class HTTPRequest extends EventEmitter {
     if (100 <= status && status < 200) {
       this.emit("info", response);
       this.emit("i", response);
-    } else if (200 <= status && status < 300) {
+    }
+    else if (200 <= status && status < 300) {
       this.emit("success", response);
       this.emit("ok", response);
       this.emit("s", response);
       this.emit("o", response);
-    } else if (300 <= status && status < 400) {
+    }
+    else if (300 <= status && status < 400) {
       this.emit("redirect", response);
       this.emit("redir", response);
       this.emit("d", response);
-    } else if (400 <= status && status < 500) {
+    }
+    else if (400 <= status && status < 500) {
       this.emit("error", response);
       this.emit("err", response);
       this.emit("e", response);
-    } else if (500 <= status && status < 600) {
+    }
+    else if (500 <= status && status < 600) {
       this.emit("error", response);
       this.emit("err", response);
       this.emit("e", response);
-    } else {
+    }
+    else {
       this.emit("what", response);
     }
   }
 
   private String stringResponse() throws IOException {
     BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(this.req.getInputStream()));
-    StringBuffer stringBuffer = new StringBuffer();
+    StringBuilder stringBuffer = new StringBuilder();
     String inputLine;
 
     while ((inputLine = bufferedReader.readLine()) != null) {
@@ -135,13 +140,12 @@ public class HTTPRequest extends EventEmitter {
     }
     bufferedReader.close();
 
-    String response = stringBuffer.toString();
-    return response;
+    return stringBuffer.toString();
   }
 
   private Json JsonResponse() throws IOException {
     BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(this.req.getInputStream()));
-    StringBuffer stringBuffer = new StringBuffer();
+    StringBuilder stringBuffer = new StringBuilder();
     String inputLine;
 
     while ((inputLine = bufferedReader.readLine()) != null) {
@@ -150,46 +154,38 @@ public class HTTPRequest extends EventEmitter {
     bufferedReader.close();
 
     String responseString = stringBuffer.toString();
-    Json responseObject = new Json(responseString);
-    return responseObject;
+    return new Json(responseString);
   }
 
   private InputStreamReader streamResponse() throws IOException {
     return new InputStreamReader(this.req.getInputStream());
   }
 
-  public static void consumerRequest(URL url, HTTPRequestOptions options, String body, Consumer<Object[]> callback)
-      throws IOException {
+  public static void consumerRequest(URL url, HTTPRequestOptions options, String body, Consumer<Object[]> callback) throws IOException {
     HTTPRequest req = new HTTPRequest(url, options, body);
-    req.on("response", (res) -> {
-      callback.accept(res);
-    });
+    req.on("response", callback);
     req.send();
   }
 
-  public static CompletableFuture<Object> futureRequest(URL url, HTTPRequestOptions options, String body)
-      throws IOException {
+  public static CompletableFuture<Object> futureRequest(URL url, HTTPRequestOptions options, String body) throws IOException {
     HTTPRequest req = new HTTPRequest(url, options, body);
     CompletableFuture<Object> future = req.future();
     req.send();
     return future;
   }
 
-  public static Object syncRequest(URL url, HTTPRequestOptions options, String body)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Object syncRequest(URL url, HTTPRequestOptions options, String body) throws InterruptedException, ExecutionException, IOException {
     return futureRequest(url, options, body).get();
   }
 
-  public static String syncStringRequest(Method method, String url, String body, String auth, String ua)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static String syncStringRequest(Method method, String url, String body, String auth, String ua) throws InterruptedException, ExecutionException, IOException {
     HTTPRequestOptions options = new HTTPRequestOptions(method, ResponseType.STRING);
     options.HEADERS.put("User-Agent", ua);
     options.HEADERS.put("Authorization", auth);
     return (String) syncRequest(new URL(url), options, body);
   }
 
-  public static Json syncJsonRequest(Method method, String url, String body, String auth, String ua)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json syncJsonRequest(Method method, String url, String body, String auth, String ua) throws InterruptedException, ExecutionException, IOException {
     HTTPRequestOptions options = new HTTPRequestOptions(method, ResponseType.JSON);
     options.HEADERS.put("User-Agent", ua);
     options.HEADERS.put("Authorization", auth);
@@ -197,91 +193,74 @@ public class HTTPRequest extends EventEmitter {
     return (Json) syncRequest(new URL(url), options, body);
   }
 
-  public static InputStreamReader syncStreamRequest(Method method, String url, String body, String auth, String ua)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static InputStreamReader syncStreamRequest(Method method, String url, String body, String auth, String ua) throws InterruptedException, ExecutionException, IOException {
     HTTPRequestOptions options = new HTTPRequestOptions(method, ResponseType.STREAM);
     options.HEADERS.put("User-Agent", ua);
     options.HEADERS.put("Authorization", auth);
     return (InputStreamReader) syncRequest(new URL(url), options, body);
   }
 
-  public static String get(String url)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static String get(String url) throws InterruptedException, ExecutionException, IOException {
     return syncStringRequest(Method.GET, url, null, null, null);
   }
 
-  public static String post(String url, String body)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static String post(String url, String body) throws InterruptedException, ExecutionException, IOException {
     return syncStringRequest(Method.POST, url, body, null, null);
   }
 
-  public static Json JsonGet(String url)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonGet(String url) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.GET, url, null, null, null);
   }
 
-  public static Json JsonGet(String url, String auth)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonGet(String url, String auth) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.GET, url, null, auth, null);
   }
 
-  public static Json JsonPost(String url, String body)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonPost(String url, String body) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.POST, url, body, null, null);
   }
 
-  public static Json JsonPost(String url, Json body)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonPost(String url, Json body) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.POST, url, body.toString(), null, null);
   }
 
-  public static Json JsonPost(String url, Json body, String auth)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonPost(String url, Json body, String auth) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.POST, url, body.toString(), auth, null);
   }
 
-  public static Json JsonPatch(String url, String body)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonPatch(String url, String body) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.PATCH, url, body, null, null);
   }
 
-  public static Json JsonPatch(String url, Json body)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonPatch(String url, Json body) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.PATCH, url, body.toString(), null, null);
   }
 
-  public static Json JsonPatch(String url, Json body, String auth)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonPatch(String url, Json body, String auth) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.PATCH, url, body.toString(), auth, null);
   }
 
-  public static Json JsonPut(String url, String body)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonPut(String url, String body) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.PUT, url, body, null, null);
   }
 
-  public static Json JsonPut(String url, Json body)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonPut(String url, Json body) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.PUT, url, body.toString(), null, null);
   }
 
-  public static Json JsonPut(String url, Json body, String auth)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonPut(String url, Json body, String auth) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.PUT, url, body.toString(), auth, null);
   }
 
-  public static Json JsonDelete(String url, String body)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonDelete(String url, String body) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.DELETE, url, body, null, null);
   }
 
-  public static Json JsonDelete(String url, Json body)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonDelete(String url, Json body) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.DELETE, url, body.toString(), null, null);
   }
 
-  public static Json JsonDelete(String url, Json body, String auth)
-      throws MalformedURLException, InterruptedException, ExecutionException, IOException {
+  public static Json JsonDelete(String url, Json body, String auth) throws InterruptedException, ExecutionException, IOException {
     return syncJsonRequest(Method.DELETE, url, body.toString(), auth, null);
   }
 

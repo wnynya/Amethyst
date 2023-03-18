@@ -18,7 +18,7 @@ public class Promise {
    * 
    */
 
-  private BiConsumer<Consumer<Object>, Consumer<Object>> task;
+  private final BiConsumer<Consumer<Object>, Consumer<Object>> task;
   private Consumer<Object> thenConsumer;
   private Consumer<Object> catchConsumer;
 
