@@ -1,6 +1,5 @@
 import config from './config.mjs';
 
-import Crypto from '@wnynya/crypto';
 import Date from 'datwo';
 import FormData from 'form-data';
 import YAML from 'yaml';
@@ -12,161 +11,207 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/**
- * functions
- */
-async function parse(opkgpath) {
-  const pkg = new JSZip();
-  await pkg.loadAsync(fs.readFileSync(opkgpath));
+let filerx = config.target.name;
+filerx = filerx.replace(/\^/g, '\\^');
+filerx = filerx.replace(/\$/g, '\\$');
+filerx = filerx.replace(/\./g, '\\.');
+filerx = filerx.replace(/\+/g, '\\+');
+filerx = filerx.replace(/\*/g, '\\*');
+filerx = filerx.replace(/\(/g, '\\(');
+filerx = filerx.replace(/\)/g, '\\)');
+filerx = filerx.replace(/\{/g, '\\{');
+filerx = filerx.replace(/\}/g, '\\}');
+filerx = filerx.replace(/\[/g, '\\[');
+filerx = filerx.replace(/\]/g, '\\]');
+filerx = filerx.replace('\\{version\\}', '(.*)');
+filerx = `^${filerx}$`;
+const fileRegExp = new RegExp(filerx);
 
-  const npkgdir = path.resolve(__dirname, '../data');
-  fs.mkdirSync(npkgdir, { recursive: true });
-  const npkgpath = path.resolve(npkgdir, Crypto.uid());
+function find() {
+  for (const filename of fs.readdirSync(config.target.dir)) {
+    const matches = filename.match(fileRegExp);
+    if (matches) {
+      const filepath = path
+        .resolve(config.target.dir, filename)
+        .replace(/\\/g, '/');
+      if (fs.statSync(filepath).size / 1024 > config.target.minkb) {
+        return {
+          path: filepath,
+          file: filename,
+          version: matches[1],
+        };
+      }
+    }
+  }
+  return null;
+}
 
-  let pluginYamlString = await pkg.file('plugin.yml').async('string');
-  let pluginYaml = YAML.parse(pluginYamlString);
-
-  let version = pluginYaml.version;
-  let apiVersion = pluginYaml['api-version'];
-
-  let channel = 'default';
-  for (const key in config.channels) {
-    if (version.match(new RegExp(key))) {
-      channel = key;
+function parse(target) {
+  let channel = null;
+  for (const chan in config.channels) {
+    const condition = config.channels[chan].condition;
+    if (condition && new RegExp(condition).test(target.version)) {
+      channel = chan;
     }
   }
 
-  version = format(config.channels[channel].version, {
-    version: version,
-    time: Date.now(),
-  });
+  channel = channel ? channel : 'default';
 
-  pluginYaml.version = version;
+  return {
+    channel: config.channels[channel].name,
+    version: formatVersion(config.channels[channel].version, target),
+  };
 
-  await pkg.file('plugin.yml', YAML.stringify(pluginYaml));
-
-  const data = await new Promise((resolve, reject) => {
-    pkg
-      .generateNodeStream({ streamFiles: true })
-      .pipe(fs.createWriteStream(npkgpath))
-      .on('finish', () => {
-        resolve({
-          path: npkgpath,
-          version: version,
-          apiVersion: apiVersion,
-          channel: config.channels[channel].name,
-        });
-      });
-  });
-
-  return data;
-}
-
-function format(string, data = {}) {
-  string = string.replace(/\{name\}/g, config.name);
-  string = string.replace(/\{version\}/g, data.version);
-  const timestampmatches = string.match(/\{timestamp:(.+)\}/g);
-  if (timestampmatches) {
-    for (var tm of timestampmatches) {
+  function formatVersion(format, target) {
+    format = format.replace(/\{version\}/g, target.version);
+    for (var tm of format.match(/\{timestamp:(.+)\}/g) || []) {
       var m = tm.match(/\{timestamp:(.+)\}/);
-      string = string.replace(m[0], new Date(data.time).format(m[1]));
+      format = format.replace(m[0], new Date().format(m[1]));
     }
+    return format;
   }
-  return string;
 }
 
-async function delayedTask(task, delay = 0) {
-  return await new Promise((resolve, reject) =>
-    setTimeout(() => {
-      task.then(resolve).catch(reject);
-    }, delay)
-  );
-}
+async function post(data) {
+  const p = fs.createReadStream(data.path);
 
-/**
- * main
- */
-async function main() {
-  const parsed = await delayedTask(
-    parse(config.target.path),
-    config.target.delay
-  );
+  const form = new FormData();
+
+  form.append('version', data.version);
+  form.append('package', p);
 
   return new Promise((resolve, reject) => {
-    console.log('Parsed Data:');
-    console.log('  version   : ' + parsed.version);
-    console.log('  apiVersion: ' + parsed.apiVersion);
-    console.log('  channel   : ' + parsed.channel);
-
-    const p = fs.createReadStream(parsed.path);
-
-    const form = new FormData();
-
-    form.append('version', parsed.version);
-    form.append('package', p);
-
     form.submit(
       {
         protocol: 'https:',
         host: config.repo.host,
-        path: config.repo.path + '/' + config.name + '/' + parsed.channel,
+        path: config.repo.path + '/' + config.repo.name + '/' + data.channel,
         headers: {
           o: config.repo.key,
         },
       },
       (error, res) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        console.log('Upload Complete');
-        fs.unlinkSync(parsed.path);
-        fs.unlinkSync(config.target.path);
-        console.log('File Removed');
-        resolve();
+        error
+          ? reject(error)
+          : res.statusCode >= 400
+          ? reject(`HTTP ${res.statusCode}`)
+          : resolve();
       }
     );
-
-    /*FilePostRequest(config.repo.host + '?o=' + config.repo.key, {
-      name: config.name,
-      version: parsed.version,
-      apiVersion: parsed.apiVersion,
-      channel: parsed.channel,
-      package: p,
-    })
-      .then(() => {
-        console.log('Upload Complete');
-        fs.unlinkSync(parsed.path);
-        fs.unlinkSync(config.target.path);
-        console.log('File Removed');
-        resolve();
-      })
-      .catch((error) => {
-        reject(error);
-      });*/
   });
 }
 
-var checkFile = true;
+const repackages = {};
+repackages.bukkitplugin = async (target, data) => {
+  const pkg = new JSZip();
+  await pkg.loadAsync(fs.readFileSync(target.path));
+
+  const d = path.resolve(__dirname, '../data');
+  fs.mkdirSync(d, { recursive: true });
+  const p = path.resolve(d, Date.now() + '');
+
+  let plugin_yml = YAML.parse(await pkg.file('plugin.yml').async('string'));
+  plugin_yml.version = data.version;
+  await pkg.file('plugin.yml', YAML.stringify(plugin_yml));
+
+  return await new Promise((resolve) => {
+    pkg
+      .generateNodeStream({ streamFiles: true })
+      .pipe(fs.createWriteStream(p))
+      .on('finish', () => {
+        resolve(p);
+      });
+  });
+};
+
+repackages.paperplugin = async (target, data) => {
+  const pkg = new JSZip();
+  await pkg.loadAsync(fs.readFileSync(target.path));
+
+  const d = path.resolve(__dirname, '../data');
+  fs.mkdirSync(d, { recursive: true });
+  const p = path.resolve(d, Date.now() + '');
+
+  let plugin_yml = YAML.parse(await pkg.file('plugin.yml').async('string'));
+  plugin_yml.version = data.version;
+  await pkg.file('plugin.yml', YAML.stringify(plugin_yml));
+
+  let paper_plugin_yml = YAML.parse(
+    await pkg.file('paper-plugin.yml').async('string')
+  );
+  paper_plugin_yml.version = data.version;
+  await pkg.file('paper-plugin.yml', YAML.stringify(paper_plugin_yml));
+
+  return await new Promise((resolve) => {
+    pkg
+      .generateNodeStream({ streamFiles: true })
+      .pipe(fs.createWriteStream(p))
+      .on('finish', () => {
+        resolve(p);
+      });
+  });
+};
+
+async function run(target) {
+  console.log('패키지 파일을 찾았습니다: ' + target.file);
+
+  const data = parse(target);
+
+  console.log('파싱된 버전:');
+  console.log('  채널: ' + data.channel);
+  console.log('  버전: ' + data.version);
+
+  let repackage = null;
+
+  if (repackages[config.type]) {
+    repackage = await repackages[config.type](target, data);
+    console.log('리패키지 파일이 생성되었습니다.');
+  }
+
+  await post({
+    path: repackage ? repackage : target.path,
+    version: data.version,
+    channel: data.channel,
+  }).catch((error) => {
+    if (repackage) {
+      fs.unlinkSync(repackage);
+      console.log('리패키지 파일이 제거되었습니다.');
+    }
+    throw error;
+  });
+
+  console.log('패키지 업로드가 완료되었습니다.');
+
+  fs.unlinkSync(target.path);
+
+  console.log('패키지 파일이 제거되었습니다.');
+
+  if (repackage) {
+    fs.unlinkSync(repackage);
+    console.log('리패키지 파일이 제거되었습니다.');
+  }
+}
+
+let running = false;
 setInterval(() => {
-  if (!checkFile) {
+  if (running) {
     return;
   }
-  if (fs.existsSync(config.target.path)) {
-    if (fs.statSync(config.target.path).size / 1024 > config.target.minkb) {
-      checkFile = false;
-      setTimeout(() => {
-        console.log('Found Target: ' + config.target.path);
-        main()
-          .then(() => {
-            console.log('Task Complete');
-            checkFile = true;
-          })
-          .catch((error) => {
-            console.warn(error);
-            checkFile = true;
-          });
-      }, config.target.delay);
-    }
+  running = true;
+  const target = find();
+  if (target) {
+    setTimeout(() => {
+      run(target)
+        .then(() => {
+          console.log('작업이 완료되었습니다.');
+          running = false;
+        })
+        .catch((error) => {
+          console.error('오류:', error);
+          running = false;
+        });
+    }, config.target.delay);
+  } else {
+    running = false;
   }
-}, 1000);
+}, config.target.delay);
