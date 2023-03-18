@@ -21,32 +21,11 @@
 
   <repositories>
 
-    <repository>
-      <id>apache.snapshots</id>
-      <name>Apache Development Snapshot Repository</name>
-      <url>https://repository.apache.org/content/repositories/snapshots</url>
-      <releases>
-        <enabled>false</enabled>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </repository>
-
   </repositories>
-
-  <pluginRepositories>
-
-    <pluginRepository>
-      <id>maven-snapshots</id>
-      <url>https://repository.apache.org/content/repositories/snapshots/</url>
-    </pluginRepository>
-
-  </pluginRepositories>
 
   <dependencies>
 
-    <!-- Google Gson (scope:complie) -->
+    <!-- Google Gson (repo:mavencentral) (scope:complie) -->
     <dependency>
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
@@ -61,17 +40,9 @@
 
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <version>3.2.0</version>
-        <configuration>
-          <outputDirectory>packages</outputDirectory>
-        </configuration>
-      </plugin>
-
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <version>3.3.0</version>
+        <version>3.4.1</version>
+
         <executions>
           <execution>
             <id>shade</id>
@@ -92,13 +63,17 @@
             </configuration>
           </execution>
         </executions>
+
         <configuration>
           <relocations>
+
             <relocation>
               <pattern>com.google.gson</pattern>
             </relocation>
+
           </relocations>
         </configuration>
+
       </plugin>
 
     </plugins>
