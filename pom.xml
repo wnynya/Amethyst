@@ -7,7 +7,7 @@
 
   <groupId>io.wany.amethyst</groupId>
   <artifactId>Amethyst</artifactId>
-  <version>0.8.4</version>
+  <version>0.8.6</version>
 
   <name>Amethyst</name>
   <url>https://wany.io</url>
@@ -25,7 +25,7 @@
 
   <dependencies>
 
-    <!-- Google Gson (repo:mavencentral) (scope:complie) -->
+    <!-- Google Gson (repo:mavencentral) -->
     <dependency>
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
@@ -69,6 +69,7 @@
 
             <relocation>
               <pattern>com.google.gson</pattern>
+              <shadedPattern>io.wany.relocated.com.google.gson</shadedPattern>
             </relocation>
 
           </relocations>
